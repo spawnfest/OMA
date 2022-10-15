@@ -29,7 +29,7 @@ string(String, Line) -> string(String, Line, String, []).
 string([], L, [], Ts) ->                     % No partial tokens!
     {ok,yyrev(Ts),L};
 string(Ics0, L0, Tcs, Ts) ->
-    case yystate(yystate(), Ics0, L0, 0, reject, 0) of
+    case yystfate(yystate(), Ics0, L0, 0, reject, 0) of
         {A,Alen,Ics1,L1} ->                  % Accepting end state
             string_cont(Ics1, L1, yyaction(A, Alen, Tcs, L0), Ts);
         {A,Alen,Ics1,L1,_S1} ->              % Accepting transition state
