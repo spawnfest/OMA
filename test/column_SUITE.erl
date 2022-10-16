@@ -21,26 +21,14 @@
 
 %-define(debug, true).
 
--include_lib("stdlib/include/erl_compile.hrl").
--include_lib("stdlib/include/assert.hrl").
--include_lib("kernel/include/file.hrl").
-
--ifdef(debug).
--define(config(X,Y), foo).
--define(datadir, "column_SUITE_data").
--define(privdir, "column_SUITE_priv").
--else.
--include_lib("common_test/include/ct.hrl").
--define(datadir, ?config(data_dir, Config)).
--define(privdir, ?config(priv_dir, Config)).
--endif.
-
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, 
 	 init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-	 number/1, end_loc/1]).
+	 number/1, end_loc/1, tab/1, badargs/1]).
+
+-include_lib("tutil.hrl").
 
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, test_server:minutes(1)).
@@ -57,7 +45,7 @@ end_per_testcase(_Case, Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [number, end_loc].
+    [number, end_loc, tab, badargs].
 
 groups() -> 
     [].
@@ -73,71 +61,6 @@ init_per_group(_GroupName, Config) ->
 
 end_per_group(_GroupName, Config) ->
     Config.
-
-run(Config, Tests) ->
-    F = fun({N,P,Pre,E}) ->
-                case catch run_test(Config, P, Pre) of
-                    E -> 
-                        ok;
-                    Bad -> 
-                        ct:fail("~nTest ~p failed. Expected~n  ~p~n"
-                                  "but got~n  ~p~n", [N, E, Bad])
-                end
-        end,
-    lists:foreach(F, Tests).
-
-run_test(Config, Def, Pre) ->
-    %% io:format("testing ~s~n", [binary_to_list(Def)]),
-    DefFile = 'leex_test.xrl',
-    Filename = 'leex_test.erl',
-    DataDir = ?privdir,
-    XrlFile = filename:join(DataDir, DefFile),
-    ErlFile = filename:join(DataDir, Filename),
-    Opts = [return, warn_unused_vars,{outdir,DataDir}],
-    ok = file:write_file(XrlFile, Def),
-    LOpts = [return, {report, false} | 
-             case Pre of
-                 default ->
-                     [];
-                 _ ->
-                     [{includefile,Pre}]
-             end],
-    XOpts = [verbose, dfa_graph], % just to get some code coverage...
-    LRet = leex:file(XrlFile, XOpts ++ LOpts),
-    case LRet of
-        {ok, _Outfile, _LWs} ->
-                 CRet = compile:file(ErlFile, Opts),
-                 case CRet of
-                     {ok, _M, _Ws} -> 
-                         AbsFile = filename:rootname(ErlFile, ".erl"),
-                         Mod = leex_test,
-                         code:purge(Mod),
-                         code:load_abs(AbsFile, Mod),
-                         Mod:t();
-                         %% warnings(ErlFile, Ws);
-                     {error, [{ErlFile,Es}], []} -> {error, Es, []};
-                     {error, [{ErlFile,Es}], [{ErlFile,Ws}]} -> {error, Es, Ws};
-                     Error  -> Error
-                 end;
-        {error, [{XrlFile,LEs}], []} -> {error, LEs, []};
-        {error, [{XrlFile,LEs}], [{XrlFile,LWs}]} -> {error, LEs, LWs};
-        LError -> LError
-    end.
-
-extract(File, {error, Es, Ws}) ->
-    {errors, extract(File, Es), extract(File, Ws)};    
-extract(File, Ts) ->
-    lists:append([T || {F, T} <- Ts,  F =:= File]).
-
-search_for_file_attr(PartialFilePathRegex, Forms) ->
-    lists:search(fun
-                   ({attribute, _, file, {FileAttr, _}}) ->
-                      case re:run(FileAttr, PartialFilePathRegex, [unicode]) of
-                        nomatch -> false;
-                        _ -> true
-                      end;
-                   (_) -> false end,
-                 Forms).
 
 %%%%%%%%%%%%%%%%%%%%%%%%
 %%% Additional tests %%%
@@ -157,6 +80,7 @@ number(Config) ->
         "t() ->\n"
         "{ok,[{float, {1,1}, 4.44}],{1,5}} = string(\"4.44\"), ok.\n">>,
            default,
+           [{error_location,column}],
            ok},
         {number_multiline,
       <<"Definitions.\n"
@@ -174,6 +98,7 @@ number(Config) ->
         "t() ->\n"
         "{ok,[{float, {2,1}, 4.44},{integer, {3,3}, 5},{integer, {7,3}, 7}],{8,2}} = string(\"\n4.44  \n  5 \n  \n\n\n  7 \n \"), ok.\n">>,
            default,
+           [{error_location,column}],
            ok}],
     run(Config, Ts),
     ok.
@@ -191,6 +116,100 @@ end_loc(Config) ->
             "t() ->\n"
             "{ok,[{second,{1,1}}],{2,1}} = string(\"a\\n\"), ok.\n">>,
       default,
+      [{error_location,column}],
       ok}],
     run(Config, Ts),
     ok.
+
+tab(Config) ->
+    Ts = [
+        {tab1,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,9}}],{2,1}} = string(\"\ta\\n\"), ok.\n">>,
+      default,
+      [{error_location,column}],
+      ok},
+    {tab2,
+      <<"Definitions.\n"
+          "Rules.\n"
+          "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+          "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+          "[\\s\\r\\n\\t]+ : skip_token.\n"
+          "Erlang code.\n"
+          "-export([t/0]).\n"
+          "t() ->\n"
+          "{ok,[{second,{1,9}}],{2,1}} = string(\"  \ta\\n\"), ok.\n">>,
+        default,
+        [{error_location,column}],
+        ok},
+    {tab3,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,9}}],{2,1}} = string(\"      \ta\\n\"), ok.\n">>,
+        default,
+        [{error_location,column}],
+        ok},
+    {tab4,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,27}},{second,{2,19}}],{2,25}} = string(\"   \t \t\t  a\\n \t \t  aaa\t\"), ok.\n">>,
+        default,
+        [{error_location,column}],
+        ok},
+    {tab5,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,15}},{second,{2,9}}],{2,16}} = string(\"   \t \t\t  a\\n \t \t  aaa\t\"), ok.\n">>,
+        default,
+        [{tab_size,3},{error_location,column}],
+        ok}],
+    run(Config, Ts),
+    ok.
+
+badargs(Config) ->
+    X1 =  <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,1}}],{2,1}} = string(\"a\\n\"), ok.\n">>,
+    ok = case catch run_test(Config, X1, default, [{tab_size,0}]) of
+            {'EXIT',{badarg,_}} -> ok
+        end,
+    ok = case catch run_test(Config, X1, default, [{tab_size,what_is_tab}]) of
+            {'EXIT',{badarg,_}} -> ok
+        end,
+    ok = case catch run_test(Config, X1, default, [{error_location,{line,column}}]) of
+            {'EXIT',{badarg,_}} -> ok
+        end,
+    ok = case catch run_test(Config, X1, default, [{error_location,33}]) of
+            {'EXIT',{badarg,_}} -> ok
+        end.

@@ -25,16 +25,6 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("kernel/include/file.hrl").
 
--ifdef(debug).
--define(config(X,Y), foo).
--define(datadir, "leex_SUITE_data").
--define(privdir, "leex_SUITE_priv").
--else.
--include_lib("common_test/include/ct.hrl").
--define(datadir, ?config(data_dir, Config)).
--define(privdir, ?config(priv_dir, Config)).
--endif.
-
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, 
 	 init_per_testcase/2, end_per_testcase/2]).
@@ -45,6 +35,8 @@
 	 pt/1, man/1, ex/1, ex2/1, not_yet/1,
 	 line_wrap/1,
 	 otp_10302/1, otp_11286/1, unicode/1, otp_13916/1]).
+
+-include_lib("tutil.hrl").
 
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, test_server:minutes(1)).
@@ -425,6 +417,7 @@ pt(Config) when is_list(Config) ->
                  {ok,[{word,{1,1},\"sture\"},{integer,{1,6},123}],1} =
                      string(\"abc123\"), ok. ">>,
            default,
+           [{error_location, column}],
            ok}],
 
     run(Config, Ts),
@@ -443,6 +436,7 @@ unicode(Config) when is_list(Config) ->
 	     "-export([t/0]).\n"
 	     "t() -> {ok, [{\"â\", 1}], 1} = string(\"â\"), ok.">>,
            default,
+           [{error_location, column}],
            ok}],
 
     run(Config, Ts),
@@ -469,6 +463,7 @@ man(Config) when is_list(Config) ->
        "        string(\"3.14atom V314\"),\n"
        "    ok.\n">>,
            default,
+           [{error_location, column}],
            ok},
 
           {man_2,
@@ -487,6 +482,7 @@ man(Config) when is_list(Config) ->
        "        string(\"3.14 314\"),\n"
        "    ok.\n">>,
            default,
+           [{error_location, column}],
            ok}],
     
     run(Config, Ts),
@@ -511,6 +507,7 @@ ex(Config) when is_list(Config) ->
         "        string(\"12 c\\na34b789a\"),\n"
         "    ok.\n">>,
            default,
+           [{error_location, column}],
            ok}
         ],
     run(Config, Ts),
@@ -675,7 +672,7 @@ escape_char(C) -> C.
     XrlFile = filename:join(Dir, "erlang_scan.xrl"),
     ok = file:write_file(XrlFile, Xrl),
     ErlFile = filename:join(Dir, "erlang_scan.erl"),
-    {ok, _} = leex:file(XrlFile, []),
+    {ok, _} = leex:file(XrlFile, [{error_location, column}]),
     {ok, _} = compile:file(ErlFile, [{outdir,Dir}]),
     code:purge(erlang_scan),
     AbsFile = filename:rootname(ErlFile, ".erl"),
@@ -821,7 +818,7 @@ Erlang code.
     XrlFile = filename:join(Dir, "test_line_wrap.xrl"),
     ok = file:write_file(XrlFile, Xrl),
     ErlFile = filename:join(Dir, "test_line_wrap.erl"),
-    {ok, _} = leex:file(XrlFile, []),
+    {ok, _} = leex:file(XrlFile, [{error_location, column}]),
     {ok, _} = compile:file(ErlFile, [{outdir,Dir}]),
     code:purge(test_line_wrap),
     AbsFile = filename:rootname(ErlFile, ".erl"),
@@ -950,6 +947,7 @@ otp_10302(Config) when is_list(Config) ->
          "    {tip, HÃ¤pp, 'HÃ¤pp',\"\\x{400}B\",\"Ã¶rn_Ð\"} = R,\n"
          "    ok.\n">>,
           default,
+          [{error_location, column}],
           ok},
       {uni_2,
        <<"%% coding: Latin-1\n"
@@ -971,6 +969,7 @@ otp_10302(Config) when is_list(Config) ->
          "    {tip, Häpp, 'Häpp',\"\\x{400}B\",\"Ã¶rn_Ð\"} = R,\n"
          "    ok.\n">>,
           default,
+          [{error_location, column}],
           ok}],
     run(Config, Ts),
 
@@ -1060,6 +1059,7 @@ otp_13916(Config) when is_list(Config) ->
              
              "    ok.\n">>,
            default,
+           [{error_location, column}],
            ok}],
     run(Config, Ts),
     ok.
@@ -1074,55 +1074,6 @@ writable(Fname) ->
     Mode = Info#file_info.mode bor 8#00200,
     ok = file:write_file_info(Fname, Info#file_info{mode = Mode}).
 
-run(Config, Tests) ->
-    F = fun({N,P,Pre,E}) ->
-                case catch run_test(Config, P, Pre) of
-                    E -> 
-                        ok;
-                    Bad -> 
-                        ct:fail("~nTest ~p failed. Expected~n  ~p~n"
-                                  "but got~n  ~p~n", [N, E, Bad])
-                end
-        end,
-    lists:foreach(F, Tests).
-
-run_test(Config, Def, Pre) ->
-    %% io:format("testing ~s~n", [binary_to_list(Def)]),
-    DefFile = 'leex_test.xrl',
-    Filename = 'leex_test.erl',
-    DataDir = ?privdir,
-    XrlFile = filename:join(DataDir, DefFile),
-    ErlFile = filename:join(DataDir, Filename),
-    Opts = [return, warn_unused_vars,{outdir,DataDir}],
-    ok = file:write_file(XrlFile, Def),
-    LOpts = [return, {report, false} | 
-             case Pre of
-                 default ->
-                     [];
-                 _ ->
-                     [{includefile,Pre}]
-             end],
-    XOpts = [verbose, dfa_graph], % just to get some code coverage...
-    LRet = leex:file(XrlFile, XOpts ++ LOpts),
-    case LRet of
-        {ok, _Outfile, _LWs} ->
-                 CRet = compile:file(ErlFile, Opts),
-                 case CRet of
-                     {ok, _M, _Ws} -> 
-                         AbsFile = filename:rootname(ErlFile, ".erl"),
-                         Mod = leex_test,
-                         code:purge(Mod),
-                         code:load_abs(AbsFile, Mod),
-                         Mod:t();
-                         %% warnings(ErlFile, Ws);
-                     {error, [{ErlFile,Es}], []} -> {error, Es, []};
-                     {error, [{ErlFile,Es}], [{ErlFile,Ws}]} -> {error, Es, Ws};
-                     Error  -> Error
-                 end;
-        {error, [{XrlFile,LEs}], []} -> {error, LEs, []};
-        {error, [{XrlFile,LEs}], [{XrlFile,LWs}]} -> {error, LEs, LWs};
-        LError -> LError
-    end.
 
 extract(File, {error, Es, Ws}) ->
     {errors, extract(File, Es), extract(File, Ws)};    

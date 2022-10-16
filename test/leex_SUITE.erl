@@ -25,16 +25,6 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("kernel/include/file.hrl").
 
--ifdef(debug).
--define(config(X,Y), foo).
--define(datadir, "leex_SUITE_data").
--define(privdir, "leex_SUITE_priv").
--else.
--include_lib("common_test/include/ct.hrl").
--define(datadir, ?config(data_dir, Config)).
--define(privdir, ?config(priv_dir, Config)).
--endif.
-
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, 
 	 init_per_testcase/2, end_per_testcase/2]).
@@ -46,6 +36,8 @@
 	 line_wrap/1,
 	 otp_10302/1, otp_11286/1, unicode/1, otp_13916/1, otp_14285/1,
          otp_17023/1, compiler_warnings/1]).
+    
+-include_lib("tutil.hrl").
 
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, test_server:minutes(1)).
@@ -82,8 +74,6 @@ init_per_group(_GroupName, Config) ->
 
 end_per_group(_GroupName, Config) ->
     Config.
-
-
 
 file(doc) ->
     "Bad files and options.";
@@ -1255,56 +1245,6 @@ writable(Fname) ->
     {ok, Info} = file:read_file_info(Fname),
     Mode = Info#file_info.mode bor 8#00200,
     ok = file:write_file_info(Fname, Info#file_info{mode = Mode}).
-
-run(Config, Tests) ->
-    F = fun({N,P,Pre,E}) ->
-                case catch run_test(Config, P, Pre) of
-                    E -> 
-                        ok;
-                    Bad -> 
-                        ct:fail("~nTest ~p failed. Expected~n  ~p~n"
-                                  "but got~n  ~p~n", [N, E, Bad])
-                end
-        end,
-    lists:foreach(F, Tests).
-
-run_test(Config, Def, Pre) ->
-    %% io:format("testing ~s~n", [binary_to_list(Def)]),
-    DefFile = 'leex_test.xrl',
-    Filename = 'leex_test.erl',
-    DataDir = ?privdir,
-    XrlFile = filename:join(DataDir, DefFile),
-    ErlFile = filename:join(DataDir, Filename),
-    Opts = [return, warn_unused_vars,{outdir,DataDir}],
-    ok = file:write_file(XrlFile, Def),
-    LOpts = [return, {report, false} | 
-             case Pre of
-                 default ->
-                     [];
-                 _ ->
-                     [{includefile,Pre}]
-             end],
-    XOpts = [verbose, dfa_graph], % just to get some code coverage...
-    LRet = leex:file(XrlFile, XOpts ++ LOpts),
-    case LRet of
-        {ok, _Outfile, _LWs} ->
-                 CRet = compile:file(ErlFile, Opts),
-                 case CRet of
-                     {ok, _M, _Ws} -> 
-                         AbsFile = filename:rootname(ErlFile, ".erl"),
-                         Mod = leex_test,
-                         code:purge(Mod),
-                         code:load_abs(AbsFile, Mod),
-                         Mod:t();
-                         %% warnings(ErlFile, Ws);
-                     {error, [{ErlFile,Es}], []} -> {error, Es, []};
-                     {error, [{ErlFile,Es}], [{ErlFile,Ws}]} -> {error, Es, Ws};
-                     Error  -> Error
-                 end;
-        {error, [{XrlFile,LEs}], []} -> {error, LEs, []};
-        {error, [{XrlFile,LEs}], [{XrlFile,LWs}]} -> {error, LEs, LWs};
-        LError -> LError
-    end.
 
 extract(File, {error, Es, Ws}) ->
     {errors, extract(File, Es), extract(File, Ws)};    
