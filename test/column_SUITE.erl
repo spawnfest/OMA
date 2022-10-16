@@ -155,7 +155,7 @@ number(Config) ->
         "Erlang code.\n"
         "-export([t/0]).\n"
         "t() ->\n"
-        "{ok,[{float, 1, 4.44}],1} = string(\"4.44\"), ok.\n">>,
+        "{ok,[{float, 1, 4.44},1} = string(\"4.44\"), ok.\n">>,
            default,
            ok}],
     run(Config, Ts),

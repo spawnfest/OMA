@@ -390,7 +390,8 @@ deterministic(Config) when is_list(Config) ->
 
     %% Matches when OTP is not installed (e.g. /lib/parsetools/include/leexinc.hrl)
     %% and when it is (e.g. /lib/parsetools-2.3.2/include/leexinc.hrl)
-    AbsolutePathSuffix = ".*/lib/parsetools.*/include/leexinc\.hrl",
+    %% AbsolutePathSuffix = ".*/lib/parsetools*/include/leexinc\.hrl",
+    AbsolutePathSuffix = ".*/lib/my_leex/include/leexinc\.hrl",
 
     ok = leex:compile(Filename, Scannerfile, #options{specific=[deterministic]}),
     {ok, FormsDet} = epp:parse_file(Scannerfile,[]),
