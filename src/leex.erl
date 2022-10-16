@@ -119,6 +119,8 @@ file(File) -> file(File, []).
               | {'verbose', boolean()}
               | {'warnings_as_errors', boolean()}
               | {'deterministic', boolean()}
+              | {'error_location', line | column}
+              | {'tab_size', pos_integer()}
               | 'dfa_graph'
               | 'report_errors' | 'report_warnings' | 'report'
               | 'return_errors' | 'return_warnings' | 'return'
@@ -281,6 +283,12 @@ check_options([{Option, Boolean} | Options], AllOptions, L)
         false ->
             badarg
         end;
+check_options([{error_location, Loc}=O | Options], AllOptions, L)
+        when Loc =:= line; Loc =:= column ->
+    check_options(Options, AllOptions, [O | L]);
+check_options([{tab_size, S}=O | Options], AllOptions, L)
+        when is_integer(S) andalso S>0 ->
+    check_options(Options, AllOptions, [O | L]);
 check_options([], _AllOptions, L) ->
     L;
 check_options(_Options, _, _L) ->
@@ -289,7 +297,7 @@ check_options(_Options, _, _L) ->
 all_options() ->
     [dfa_graph,includefile,report_errors,report_warnings,
      return_errors,return_warnings,scannerfile,verbose,
-     warnings_as_errors, deterministic].
+     warnings_as_errors, deterministic, error_location, tab_size].
 
 default_option(dfa_graph) -> false;
 default_option(includefile) -> [];
@@ -300,7 +308,9 @@ default_option(return_warnings) -> false;
 default_option(scannerfile) -> [];
 default_option(verbose) -> false;
 default_option(warnings_as_errors) -> false;
-default_option(deterministic) -> false.
+default_option(deterministic) -> false;
+default_option(error_location) -> line;
+default_option(tab_size) -> 8.
 
 atom_option(dfa_graph) -> {dfa_graph,true};
 atom_option(report_errors) -> {report_errors,true};
@@ -596,7 +606,8 @@ parse_rule(S, Line, Atoks, Ms, N, St) ->
             TokenChars = var_used('TokenChars', Atoks),
             TokenLen = var_used('TokenLen', Atoks),
             TokenLine = var_used('TokenLine', Atoks),
-            {ok,{R,N},{N,Atoks,TokenChars,TokenLen,TokenLine},St};
+            TokenCol = var_used('TokenCol', Atoks),
+            {ok,{R,N},{N,Atoks,TokenChars,TokenLen,TokenLine,TokenCol},St};
         {error,E} ->
             add_error({Line,leex,E}, St)
     end.
@@ -1394,7 +1405,9 @@ open_inc_file(State) ->
     end.
 
 inc_file_name([]) ->
-    Incdir = filename:join(code:lib_dir(parsetools), "include"),
+    %% To use our local "leexinc.hrl"
+    %%Incdir = filename:join(code:lib_dir(parsetools), "include"),
+    Incdir = code:lib_dir(my_leex,include),
     filename:join(Incdir, ?LEEXINC);
 inc_file_name(Filename) ->
     Filename.
@@ -1415,6 +1428,10 @@ out_file(Ifile, Ofile, St, DFA, DF, Actions, Code, L) ->
             case string:slice(Line, 0, 5) of
                 "##mod" -> out_module(Ofile, St);
                 "##cod" -> out_erlang_code(Ofile, St, Code, L);
+                "##str" -> out_string(Ofile, St#leex.opts);
+                "##tkn" -> out_token(Ofile, St#leex.opts);
+                "##tks" -> out_tokens(Ofile, St#leex.opts);
+                "##tab" -> out_tab_size(Ofile, St#leex.opts);
                 "##dfa" -> out_dfa(Ofile, St, DFA, Code, DF, L);
                 "##act" -> out_actions(Ofile, St#leex.xfile, Deterministic, Actions);
                 _ -> io:put_chars(Ofile, Line)
@@ -1448,6 +1465,78 @@ file_copy(From, To) ->
             file_copy(From, To)
     end.
 
+out_tab_size(File, Opts) ->
+    io:fwrite(File, "tab_size() -> ~p.\n", [proplists:get_value(tab_size, Opts)]).
+
+out_string(File, Opts) ->
+    Vars = lists:join(", ",["Ics","L0","C0","Tcs","Ts"]),
+    out_string_head(File, Vars),
+    EL = proplists:get_value(error_location, Opts),
+    case EL of
+        column -> 
+            io:fwrite(File,"    do_string(~s).\n",[Vars]);
+        line ->
+            io:fwrite(File,"    case do_string(~s) of\n",[Vars]),
+            io:fwrite(File,"        {ok, T, {L,_}} -> {ok, T, L};\n",[]),
+            io:fwrite(File,"        {error, {{EL,_},M,D}, {L,_}} ->\n",[]),
+            io:fwrite(File,"            EI = {EL,M,D},\n",[]),
+            io:fwrite(File,"            {error, EI, L}\n",[]),
+            io:fwrite(File,"    end.\n",[])
+    end.
+
+out_string_head(File, Vars) ->
+    out_head(File, string, Vars).
+
+out_token(File, Opts) ->
+    Vars = lists:join(", ",["Cont, Chars, Line, Col"]),
+    out_token_head(File, Vars),
+    EL = proplists:get_value(error_location, Opts),
+    case EL of
+        column -> 
+            io:fwrite(File,"    do_token(~s).\n",[Vars]);
+        line ->
+            out_case(File, do_token, Vars),
+            out_token_wrapper(File)
+    end.
+
+out_token_head(File, Vars) ->
+    out_head(File, token, Vars).
+
+out_tokens(File, Opts) ->
+    Vars = lists:join(", ",["Cont, Chars, Line, Col"]),
+    out_tokens_head(File, Vars),
+    EL = proplists:get_value(error_location, Opts),
+    case EL of
+        column -> 
+            io:fwrite(File,"    do_tokens(~s).\n",[Vars]);
+        line ->
+            out_case(File, do_tokens, Vars),
+            out_tokens_wrapper(File)
+    end.
+
+out_tokens_head(File, Vars) ->
+    out_head(File, tokens, Vars).
+
+out_head(File, Fun, Vars) ->
+    io:fwrite(File, "~s(~s) -> \n",[Fun,Vars]).
+
+out_case(File, Fun, Vars) ->
+    io:fwrite(File,"    case ~s(~s) of\n",[Fun,Vars]).
+
+out_token_wrapper(File) ->
+    out_tokens_wrapper(File).
+
+out_tokens_wrapper(File) ->
+    io:fwrite(File,"        {more, _} = C -> C;\n",[]),
+    io:fwrite(File,"        {done, Ret0, R} ->\n",[]),
+    io:fwrite(File,"            Ret1 = case Ret0 of\n",[]),
+    io:fwrite(File,"                {ok, T, {L,_}} -> {ok, T, L};\n",[]),
+    io:fwrite(File,"                {eof, {L,_}} -> {eof, L};\n",[]),
+    io:fwrite(File,"                {error, {{EL,_},M,D},{L,_}} -> {error, {EL,M,D},L}\n",[]),
+    io:fwrite(File,"            end,\n",[]),
+    io:fwrite(File,"            {done, Ret1, R}\n",[]),
+    io:fwrite(File,"    end.\n",[]).
+
 out_dfa(File, St, DFA, Code, DF, L) ->
     {_CodeL,_CodePos,NCodeLines} = Code,
     Deterministic = proplists:get_bool(deterministic, St#leex.opts),
@@ -1455,36 +1544,37 @@ out_dfa(File, St, DFA, Code, DF, L) ->
     output_file_directive(File, St#leex.efile, Deterministic, L+(NCodeLines-1)+3),
     io:fwrite(File, "yystate() -> ~w.~n~n", [DF]),
     foreach(fun (S) -> out_trans(File, S) end, DFA),
-    io:fwrite(File, "yystate(S, Ics, Line, Tlen, Action, Alen) ->~n", []),
-    io:fwrite(File, "    {Action,Alen,Tlen,Ics,Line,S}.~n", []).
+    io:fwrite(File, "yystate(S, Ics, Line, Col, Tlen, Action, Alen) ->~n", []),
+    io:fwrite(File, "    {Action,Alen,Tlen,Ics,Line, Col,S}.~n", []).
 
 out_trans(File, #dfa_state{no=N,trans=[],accept={accept,A}}) ->
     %% Accepting end state, guaranteed done.
-    io:fwrite(File, "yystate(~w, Ics, Line, Tlen, _, _) ->~n", [N]),
-    io:fwrite(File, "    {~w,Tlen,Ics,Line};~n", [A]);
+    io:fwrite(File, "yystate(~w, Ics, Line, Col, Tlen, _, _) ->~n", [N]),
+    io:fwrite(File, "    {~w,Tlen,Ics,Line, Col};~n", [A]);
 out_trans(File, #dfa_state{no=N,trans=Tr,accept={accept,A}}) ->
     %% Accepting state, but there maybe more.
     foreach(fun (T) -> out_accept_tran(File, N, A, T) end, pack_trans(Tr)),
-    io:fwrite(File, "yystate(~w, Ics, Line, Tlen, _, _) ->~n", [N]),
-    io:fwrite(File, "    {~w,Tlen,Ics,Line,~w};~n", [A,N]);
+    io:fwrite(File, "yystate(~w, Ics, Line, Col, Tlen, _, _) ->~n", [N]),
+    io:fwrite(File, "    {~w,Tlen,Ics,Line, Col,~w};~n", [A,N]);
 out_trans(File, #dfa_state{no=N,trans=Tr,accept=noaccept}) ->
     %% Non-accepting transition state.
     foreach(fun (T) -> out_noaccept_tran(File, N, T) end, pack_trans(Tr)),
-    io:fwrite(File, "yystate(~w, Ics, Line, Tlen, Action, Alen) ->~n", [N]),
-    io:fwrite(File, "    {Action,Alen,Tlen,Ics,Line,~w};~n", [N]).
+    io:fwrite(File, "yystate(~w, Ics, Line, Col, Tlen, Action, Alen) ->~n", [N]),
+    io:fwrite(File, "    {Action,Alen,Tlen,Ics,Line, Col,~w};~n", [N]).
 
+%% SW-INT: Cf? Cl? (found, limit)?
 out_accept_tran(File, N, A, {{Cf,maxchar},S}) ->
     out_accept_head_max(File, N, Cf),
-    out_accept_body(File, S, "Line", A);
+    out_accept_body(File, S, "Line", "Col", A);
 out_accept_tran(File, N, A, {{Cf,Cl},S}) ->
     out_accept_head_range(File, N, Cf, Cl),
-    out_accept_body(File, S, "Line", A);
+    out_accept_body(File, S, "Line", "Col", A);
 out_accept_tran(File, N, A, {$\n,S}) ->
     out_accept_head_1(File, N, $\n),
-    out_accept_body(File, S, "Line+1", A);
+    out_accept_body(File, S, "Line+1", "1", A);
 out_accept_tran(File, N, A, {C,S}) ->
     out_accept_head_1(File, N, C),
-    out_accept_body(File, S, "Line", A).
+    out_accept_body(File, S, "Line", "Col", A).
 
 out_accept_head_1(File, State, Char) ->
     out_head_1(File, State, Char, "_", "_").
@@ -1495,21 +1585,21 @@ out_accept_head_max(File, State, Min) ->
 out_accept_head_range(File, State, Min, Max) ->
     out_head_range(File, State, Min, Max, "_", "_").
 
-out_accept_body(File, Next, Line, Action) ->
-    out_body(File, Next, Line, io_lib:write(Action), "Tlen").
+out_accept_body(File, Next, Line, Col, Action) ->
+    out_body(File, Next, Line, Col, io_lib:write(Action), "Tlen").
 
 out_noaccept_tran(File, N, {{Cf,maxchar},S}) ->
     out_noaccept_head_max(File, N, Cf),
-    out_noaccept_body(File, S, "Line");
+    out_noaccept_body(File, S, "Line", "Col");
 out_noaccept_tran(File, N, {{Cf,Cl},S}) ->
     out_noaccept_head_range(File, N, Cf, Cl),
-    out_noaccept_body(File, S, "Line");
+    out_noaccept_body(File, S, "Line", "Col");
 out_noaccept_tran(File, N, {$\n,S}) ->
     out_noaccept_head_1(File, N, $\n),
-    out_noaccept_body(File, S, "Line+1");
+    out_noaccept_body(File, S, "Line+1", "1");
 out_noaccept_tran(File, N, {C,S}) ->
     out_noaccept_head_1(File, N, C),
-    out_noaccept_body(File, S, "Line").
+    out_noaccept_body(File, S, "Line", "Col").
 
 out_noaccept_head_1(File, State, Char) ->
     out_head_1(File, State, Char, "Action", "Alen").
@@ -1520,24 +1610,27 @@ out_noaccept_head_max(File, State, Min) ->
 out_noaccept_head_range(File, State, Min, Max) ->
     out_head_range(File, State, Min, Max, "Action", "Alen").
 
-out_noaccept_body(File, Next, Line) ->
-    out_body(File, Next, Line, "Action", "Alen").
+out_noaccept_body(File, Next, Line, Col) ->
+    out_body(File, Next, Line, Col, "Action", "Alen").
 
+out_head_1(File, State, Char = $\n, Action, Alen) ->
+    io:fwrite(File, "yystate(~w, [~w|Ics], Line, _, Tlen, ~s, ~s) ->\n",
+              [State,Char,Action,Alen]);
 out_head_1(File, State, Char, Action, Alen) ->
-    io:fwrite(File, "yystate(~w, [~w|Ics], Line, Tlen, ~s, ~s) ->\n",
+    io:fwrite(File, "yystate(~w, [~w|Ics], Line, Col, Tlen, ~s, ~s) ->\n",
               [State,Char,Action,Alen]).
 
 out_head_max(File, State, Min, Action, Alen) ->
-    io:fwrite(File, "yystate(~w, [C|Ics], Line, Tlen, ~s, ~s) when C >= ~w ->\n",
+    io:fwrite(File, "yystate(~w, [C|Ics], Line, Col, Tlen, ~s, ~s) when C >= ~w ->\n",
               [State,Action,Alen,Min]).
 
 out_head_range(File, State, Min, Max, Action, Alen) ->
-    io:fwrite(File, "yystate(~w, [C|Ics], Line, Tlen, ~s, ~s) when C >= ~w, C =< ~w ->\n",
+    io:fwrite(File, "yystate(~w, [C|Ics], Line, Col, Tlen, ~s, ~s) when C >= ~w, C =< ~w ->\n",
               [State,Action,Alen,Min,Max]).
 
-out_body(File, Next, Line, Action, Alen) ->
-    io:fwrite(File, "    yystate(~w, Ics, ~s, Tlen+1, ~s, ~s);\n",
-              [Next,Line,Action,Alen]).
+out_body(File, Next, Line, Col, Action, Alen) ->
+    io:fwrite(File, "    yystate(~w, Ics, ~s, ~s, Tlen+1, ~s, ~s);\n",
+              [Next,Line,Col,Action,Alen]).
 
 %% pack_trans([{Crange,State}]) -> [{Crange,State}] when
 %%      Crange = {Char,Char} | Char.
@@ -1581,31 +1674,32 @@ pack_trans([], Pt) -> Pt.
 out_actions(File, XrlFile, Deterministic, As) ->
     As1 = prep_out_actions(As),
     foreach(fun (A) -> out_action(File, A) end, As1),
-    io:fwrite(File, "yyaction(_, _, _, _) -> error.~n", []),
+    io:fwrite(File, "yyaction(_, _, _, _, _) -> error.~n", []),
     foreach(fun (A) -> out_action_code(File, XrlFile, Deterministic, A) end, As1).
 
 prep_out_actions(As) ->
     map(fun ({A,empty_action}) ->
                 {A,empty_action};
-            ({A,Code,TokenChars,TokenLen,TokenLine}) ->
+            ({A,Code,TokenChars,TokenLen, TokenLine, TokenCol}) ->
                 Vs = [{TokenChars,"TokenChars"},
                       {TokenLen,"TokenLen"},
                       {TokenLine,"TokenLine"},
+                      {TokenCol,"TokenCol"},
                       {TokenChars,"YYtcs"},
                       {TokenLen or TokenChars,"TokenLen"}],
                 Vars = [if F -> S; true -> "_" end || {F,S} <- Vs],
                 Name = list_to_atom(lists:concat([yyaction_,A])),
-                [Chars,Len,Line,_,_] = Vars,
-                Args = [V || V <- [Chars,Len,Line], V =/= "_"],
+                [Chars,Len,Line,Col,_,_] = Vars,
+                Args = [V || V <- [Chars,Len,Line,Col], V =/= "_"],
                 ArgsChars = lists:join(", ", Args),
                 {A,Code,Vars,Name,Args,ArgsChars}
         end, As).
 
 out_action(File, {A,empty_action}) ->
-    io:fwrite(File, "yyaction(~w, _, _, _) -> skip_token;~n", [A]);
+    io:fwrite(File, "yyaction(~w, _, _, _, _) -> skip_token;~n", [A]);
 out_action(File, {A,_Code,Vars,Name,_Args,ArgsChars}) ->
-    [_,_,Line,Tcs,Len] = Vars,
-    io:fwrite(File, "yyaction(~w, ~s, ~s, ~s) ->~n", [A,Len,Tcs,Line]),
+    [_,_,Line,Col,Tcs,Len] = Vars,
+    io:fwrite(File, "yyaction(~w, ~s, ~s, ~s, ~s) ->~n", [A,Len,Tcs,Line, Col]),
     if
         Tcs =/= "_" ->
             io:fwrite(File, "    TokenChars = yypre(YYtcs, TokenLen),~n", []);
