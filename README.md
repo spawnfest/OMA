@@ -6,9 +6,15 @@ Author: marko.mindek@gmail.com
 
 The idea is taken from the Spawnfest project ideas:
 
-    Currently Leex https://erlang.org/doc/man/leex.html the lexical analyser generator for Erlang does not support column numbers for the generated scanners. The returned tokens contain only a line number and not a tuple of {line(), column()}. This doesn't matter for the Erlang compiler because it doesn't use a leex generated scanner but all languages that do use leex can't support column numbers in error messages because of that. For backwards compatibility this should probably be optional. Optimally such a project could target itself for inclusion in Erlang/OTP. 
+    Currently Leex https://erlang.org/doc/man/leex.html the lexical analyser generator for Erlang does not support column numbers for the generated scanners. 
+    The returned tokens contain only a line number and not a tuple of {line(), column()}.
+    This doesn't matter for the Erlang compiler because it doesn't use a leex generated scanner but all languages that do use leex can't support column numbers in error messages because of that.
+    For backwards compatibility this should probably be optional.
+    Optimally such a project could target itself for inclusion in Erlang/OTP. 
 
-This is a *forked* part of the latest OTP's `leex` module. All the modifications were done by myself and everything was done inside hackaton time interval.
+This is a *forked* part of the latest OTP's `leex` module.
+Two source files that are relevant (`leexinc.hrl` and `leex.erl`) and were taken from the latest OTP. All modification of those 2 files are in one [commit](https://github.com/spawnfest/OMA/commit/9eece882a35590c1a68145bc3310d3982392e493) so it is easy to follow it.
+All the modifications were done by myself and everything was done inside hackaton time interval.
 
 ### Main Features
 +   Column number in errors
