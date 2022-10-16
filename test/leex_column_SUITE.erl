@@ -109,7 +109,7 @@ file(Config) when is_list(Config) ->
     Mini = <<"Definitions.\n"
              "D  = [0-9]\n"
              "Rules.\n"
-             "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
              "Erlang code.\n">>,
     ok = file:write_file(Filename, Mini),
     {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
@@ -146,7 +146,7 @@ file(Config) when is_list(Config) ->
     Warn = <<"Definitions.1998\n"
              "D  = [0-9]\n"
              "Rules.\n"
-             "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
              "Erlang code.\n">>,
     ok = file:write_file(Filename, Warn),
     error = leex:file(Filename, [warnings_as_errors]),
@@ -173,7 +173,7 @@ compile(Config) when is_list(Config) ->
     Mini = <<"Definitions.\n"
              "D  = [0-9]\n"
              "Rules.\n"
-             "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
              "Erlang code.\n">>,
     ok = file:write_file(Filename, Mini),
     ok = leex:compile(Filename, Scannerfile, #options{}),
@@ -193,7 +193,7 @@ syntax(Config) when is_list(Config) ->
                                  "D  = [0-9]\n"
                                  "%% comment\n"
                                  "Rules.\n"
-                                 "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n
+                                 "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n
                                  ">>),
     {error,[{_,[{7,leex,missing_code}]}],[]} = leex:file(Filename, Ret),
     ok = file:write_file(Filename, 
@@ -280,7 +280,7 @@ syntax(Config) when is_list(Config) ->
                                  "D  = [0-9]\n"
                                  "Rules.\n"
                                  "{L}+  : {token,\n"
-                                 "         {word,{TokenLine,TokenCol},TokenChars,\n"
+                                 "         {word,TokenLoc,TokenChars,\n"
                                  "          DDDD}}.\n" % unbound
                                  "Erlang code.\n"
                                  "an error.\n">>),     % syntax error
@@ -367,7 +367,7 @@ deterministic(Config) when is_list(Config) ->
     Mini = <<"Definitions.\n"
              "D  = [0-9]\n"
              "Rules.\n"
-             "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
              "Erlang code.\n">>,
     ok = file:write_file(Filename, Mini),
 
@@ -405,9 +405,9 @@ pt(Config) when is_list(Config) ->
             "L  = [a-z]\n"
 
             "Rules.\n"
-            "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+            "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
             "abc{D}+  : {skip_token,\"sture\" ++ string:substr(TokenChars, 4)}.\n"
-            "{D}+  : {token,{integer,{TokenLine,TokenCol},list_to_integer(TokenChars)}}.\n"
+            "{D}+  : {token,{integer,TokenLoc,list_to_integer(TokenChars)}}.\n"
             "\\s  : .\n"
             "\\r\\n  : {end_token,{crlf,TokenLine}}.\n"
 
@@ -450,11 +450,11 @@ man(Config) when is_list(Config) ->
      <<"Definitions.\n"
        "Rules.\n"
        "[a-z][0-9a-zA-Z_]* :\n"
-       "    {token,{atom,{TokenLine,TokenCol},list_to_atom(TokenChars)}}.\n"
+       "    {token,{atom,TokenLoc,list_to_atom(TokenChars)}}.\n"
        "[A-Z_][0-9a-zA-Z_]* :\n"
-       "    {token,{var,{TokenLine,TokenCol},list_to_atom(TokenChars)}}.\n"
+       "    {token,{var,TokenLoc,list_to_atom(TokenChars)}}.\n"
        "(\\+|-)?[0-9]+\\.[0-9]+((E|e)(\\+|-)?[0-9]+)? : \n"
-       "   {token,{float,{TokenLine,TokenCol},list_to_float(TokenChars)}}.\n"
+       "   {token,{float,TokenLoc,list_to_float(TokenChars)}}.\n"
        "\\s : skip_token.\n"
        "Erlang code.\n"
        "-export([t/0]).\n"
@@ -471,9 +471,9 @@ man(Config) when is_list(Config) ->
        "D = [0-9]\n"
        "Rules.\n"
        "{D}+ :\n"
-       "  {token,{integer,{TokenLine,TokenCol},list_to_integer(TokenChars)}}.\n"
+       "  {token,{integer,TokenLoc,list_to_integer(TokenChars)}}.\n"
        "{D}+\\.{D}+((E|e)(\\+|\\-)?{D}+)? :\n"
-       "  {token,{float,{TokenLine,TokenCol},list_to_float(TokenChars)}}.\n"
+       "  {token,{float,TokenLoc,list_to_float(TokenChars)}}.\n"
        "\\s : skip_token.\n"
        "Erlang code.\n"
        "-export([t/0]).\n"
@@ -497,9 +497,9 @@ ex(Config) when is_list(Config) ->
         "D = [0-543-705-982]\n"
         "Rules.\n"
         "{D}+ :\n"
-        "  {token,{integer,{TokenLine,TokenCol},list_to_integer(TokenChars)}}.\n"
+        "  {token,{integer,TokenLoc,list_to_integer(TokenChars)}}.\n"
         "[^235]+ :\n"
-        "  {token,{list_to_atom(TokenChars),{TokenLine,TokenCol}}}.\n"
+        "  {token,{list_to_atom(TokenChars),TokenLoc}}.\n"
         "Erlang code.\n"
         "-export([t/0]).\n"
         "t() ->\n"
@@ -534,9 +534,9 @@ WS  = ([\\000-\\s]|%.*)
  
 Rules.
 {D}+\\.{D}+((E|e)(\\+|\\-)?{D}+)? :
-      {token,{float,{TokenLine,TokenCol},list_to_float(TokenChars)}}.
+      {token,{float,TokenLoc,list_to_float(TokenChars)}}.
 {D}+#{H}+  :  base(TokenLine, TokenChars).
-{D}+    :  {token,{integer,{TokenLine,TokenCol},list_to_integer(TokenChars)}}.
+{D}+    :  {token,{integer,TokenLoc,list_to_integer(TokenChars)}}.
 {L}{A}*    :  Atom = list_to_atom(TokenChars),
       {token,case reserved_word(Atom) of
          true -> {Atom,TokenLine};
@@ -549,13 +549,13 @@ Rules.
        {'EXIT',_} -> {error,\"illegal atom \" ++ TokenChars};
        Atom -> {token,{atom,TokenLine,Atom}}
       end.
-({U}|_){A}*  :  {token,{var,{TokenLine,TokenCol},list_to_atom(TokenChars)}}.
+({U}|_){A}*  :  {token,{var,TokenLoc,list_to_atom(TokenChars)}}.
 \"(\\\\\\^.|\\\\.|[^\"])*\" :
       %% Strip quotes.
       S = lists:sublist(TokenChars, 2, TokenLen - 2),
-      {token,{string,{TokenLine,TokenCol},string_gen(S)}}.
+      {token,{string,TokenLoc,string_gen(S)}}.
 \\$(\\\\{O}{O}{O}|\\\\\\^.|\\\\.|.) :
-      {token,{char,{TokenLine,TokenCol},cc_convert(TokenChars)}}.
+      {token,{char,TokenLoc,cc_convert(TokenChars)}}.
 ->    :  {token,{'->',TokenLine}}.
 :-    :  {token,{':-',TokenLine}}.
 \\|\\|    :  {token,{'||',TokenLine}}.
@@ -919,7 +919,7 @@ otp_10302(Config) when is_list(Config) ->
     Mini = <<"Definitions.\n"
              "D  = [0-9]\n"
              "Rules.\n"
-             "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
              "Erlang code.\n">>,
     LeexPre = filename:join(Dir, "leexinc.hrl"),
     ok = file:write_file(LeexPre, <<"%% coding: UTF-8\n ä">>),
@@ -995,7 +995,7 @@ otp_11286(Config) when is_list(Config) ->
               "Definitions.\n"
               "D  = [0-9]\n"
               "Rules.\n"
-              "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+              "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
               "Erlang code.\n">>,
     ok = rpc:call(Node, file, write_file, [Filename, Mini1]),
     {ok, _, []} = rpc:call(Node, leex, file, [Filename, Options]),
@@ -1005,7 +1005,7 @@ otp_11286(Config) when is_list(Config) ->
     Mini2 = <<"Definitions.\n"
               "D  = [0-9]\n"
               "Rules.\n"
-              "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+              "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
               "Erlang code.\n">>,
     ok = rpc:call(Node, file, write_file, [Filename, Mini2]),
     {ok, _, []} = rpc:call(Node, leex, file, [Filename, Options]),
@@ -1016,7 +1016,7 @@ otp_11286(Config) when is_list(Config) ->
               "Definitions.\n"
               "D  = [0-9]\n"
               "Rules.\n"
-              "{L}+  : {token,{word,{TokenLine,TokenCol},TokenChars}}.\n"
+              "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
               "Erlang code.\n">>,
     ok = rpc:call(Node, file, write_file, [Filename, Mini3]),
     {ok, _, []} = rpc:call(Node, leex, file, [Filename, Options]),
@@ -1038,10 +1038,10 @@ otp_13916(Config) when is_list(Config) ->
              "Rules.\n"
              "%% mark line break(s) and empty lines by token 'break'\n"
              "%% in order to use as delimiters\n"
-             "{B}({S}*{B})+ : {token, {break,   {TokenLine,TokenCol}}}.\n"
-             "{B}           : {token, {break,   {TokenLine,TokenCol}}}.\n"
-             "{S}+          : {token, {blank,   {TokenLine,TokenCol}, TokenChars}}.\n"
-             "{W}+          : {token, {word,    {TokenLine,TokenCol}, TokenChars}}.\n"
+             "{B}({S}*{B})+ : {token, {break,   TokenLoc}}.\n"
+             "{B}           : {token, {break,   TokenLoc}}.\n"
+             "{S}+          : {token, {blank,   TokenLoc, TokenChars}}.\n"
+             "{W}+          : {token, {word,    TokenLoc, TokenChars}}.\n"
              "Erlang code.\n"
              "-export([t/0]).\n"
              "t() ->\n"

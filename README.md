@@ -56,9 +56,9 @@ Option `{tab_size, pos_integer()}` is also added. This allows user to customize 
 
 Two new function are exported: `token/4` and `tokens/4`. This is to allow those function to start tokenizing not just from some line, but from some line and column. Rule of thumb is: when `error_location` is `line`, use `token/3` and `token/4`. When it is `column`, use `token/4` and `tokens/4`.
 
-### Added variable
+### Added variables
 
-I've added a new variable `TokenCol` to be available in writing `Actions` alongside `TokenChars`, `TokenLen` and `TokenLine`. I could also add `TokenLoc={TokenLine, TokenCol}` to save some characters while writing `.xrl` files, but it is kinda complicated to do it without `unused` warnings, so it is not a priority feature.
+I've added two new variables, `TokenCol` and `TokenLoc`, to be available in writing `Actions` alongside `TokenChars`, `TokenLen` and `TokenLine`. `TokenCol` represents starting column of the token. Variable `TokenLoc` is just an alias for `{TokenLine, TokenCol}` to save some characters while writing `.xrl` files.
 
 ## Build
 Environment: rebar 3.19.0 on Erlang/OTP 25 Erts 13.0
@@ -89,6 +89,5 @@ Feel free to add options while calling `leex:file/2`, **but** make sure that you
 ## TODOs
 
 + how to handle pushing characters back? Is it even possible to handle this while keeping Line and Column correctness?
-+ expose additional variable `TokenLoc` which would be just an alias for `{TokenLine, TokenCol}`. This would be handy if you want your tokens to include both line and column number
 + more testing (especially unicode characters and column number correctness)
 + better documentation

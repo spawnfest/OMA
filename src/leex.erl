@@ -607,7 +607,8 @@ parse_rule(S, Line, Atoks, Ms, N, St) ->
             TokenLen = var_used('TokenLen', Atoks),
             TokenLine = var_used('TokenLine', Atoks),
             TokenCol = var_used('TokenCol', Atoks),
-            {ok,{R,N},{N,Atoks,TokenChars,TokenLen,TokenLine,TokenCol},St};
+            TokenLoc = var_used('TokenLoc', Atoks),
+            {ok,{R,N},{N,Atoks,TokenChars,TokenLen,TokenLine,TokenCol, TokenLoc},St};
         {error,E} ->
             add_error({Line,leex,E}, St)
     end.
@@ -1680,11 +1681,11 @@ out_actions(File, XrlFile, Deterministic, As) ->
 prep_out_actions(As) ->
     map(fun ({A,empty_action}) ->
                 {A,empty_action};
-            ({A,Code,TokenChars,TokenLen, TokenLine, TokenCol}) ->
+            ({A,Code,TokenChars,TokenLen, TokenLine, TokenCol, TokenLoc}) ->
                 Vs = [{TokenChars,"TokenChars"},
                       {TokenLen,"TokenLen"},
-                      {TokenLine,"TokenLine"},
-                      {TokenCol,"TokenCol"},
+                      {TokenLine or TokenLoc,"TokenLine"},
+                      {TokenCol or TokenLoc,"TokenCol"},
                       {TokenChars,"YYtcs"},
                       {TokenLen or TokenChars,"TokenLen"}],
                 Vars = [if F -> S; true -> "_" end || {F,S} <- Vs],
@@ -1692,12 +1693,12 @@ prep_out_actions(As) ->
                 [Chars,Len,Line,Col,_,_] = Vars,
                 Args = [V || V <- [Chars,Len,Line,Col], V =/= "_"],
                 ArgsChars = lists:join(", ", Args),
-                {A,Code,Vars,Name,Args,ArgsChars}
+                {A,Code,Vars,Name,Args,ArgsChars, TokenLoc}
         end, As).
 
 out_action(File, {A,empty_action}) ->
     io:fwrite(File, "yyaction(~w, _, _, _, _) -> skip_token;~n", [A]);
-out_action(File, {A,_Code,Vars,Name,_Args,ArgsChars}) ->
+out_action(File, {A,_Code,Vars,Name,_Args,ArgsChars,_TokenLoc}) ->
     [_,_,Line,Col,Tcs,Len] = Vars,
     io:fwrite(File, "yyaction(~w, ~s, ~s, ~s, ~s) ->~n", [A,Len,Tcs,Line, Col]),
     if
@@ -1709,13 +1710,18 @@ out_action(File, {A,_Code,Vars,Name,_Args,ArgsChars}) ->
 
 out_action_code(_File, _XrlFile, _Deterministic, {_A,empty_action}) ->
     ok;
-out_action_code(File, XrlFile, Deterministic, {_A,Code,_Vars,Name,Args,ArgsChars}) ->
+out_action_code(File, XrlFile, Deterministic, {_A,Code,_Vars,Name,Args,ArgsChars,TokenLoc}) ->
     %% Should set the file to the .erl file, but instead assumes that
     %% ?LEEXINC is syntactically correct.
     io:fwrite(File, "\n-compile({inline,~w/~w}).\n", [Name, length(Args)]),
     L = erl_scan:line(hd(Code)),
     output_file_directive(File, XrlFile, Deterministic, L-2),
     io:fwrite(File, "~s(~s) ->~n", [Name, ArgsChars]),
+    if
+        TokenLoc ->
+            io:fwrite(File, "    TokenLoc={TokenLine,TokenCol},~n", []);
+        true -> ok
+    end,
     io:fwrite(File, "    ~ts\n", [pp_tokens(Code, L, File)]).
 
 %% pp_tokens(Tokens, Line, File) -> [char()].

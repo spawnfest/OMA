@@ -11,7 +11,7 @@ Rules.
   skip_token.
 
 {D}+ :
-  {token,{integer,{TokenLine, TokenCol},list_to_integer(TokenChars)}}.
+  {token,{integer,TokenLoc,list_to_integer(TokenChars)}}.
 
 Erlang code.
 

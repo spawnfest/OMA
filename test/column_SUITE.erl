@@ -26,7 +26,7 @@
 	 init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-	 number/1, end_loc/1, tab/1, badargs/1]).
+	 number/1, end_loc/1, tab/1, badargs/1, token_loc_var/1]).
 
 -include_lib("tutil.hrl").
 
@@ -45,7 +45,7 @@ end_per_testcase(_Case, Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [number, end_loc, tab, badargs].
+    [number, end_loc, tab, badargs, token_loc_var].
 
 groups() -> 
     [].
@@ -213,3 +213,34 @@ badargs(Config) ->
     ok = case catch run_test(Config, X1, default, [{error_location,33}]) of
             {'EXIT',{badarg,_}} -> ok
         end.
+
+token_loc_var(Config) ->
+    Ts = [
+        {token_loc1,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, TokenLoc}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,9}}],{2,1}} = string(\"\ta\\n\"), ok.\n">>,
+      default,
+      [{error_location,column}],
+      ok},
+    {token_loc2,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, TokenLoc}}.\n"
+            "[a]+ : {token, {second, TokenLoc}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,15}},{second,{2,9}}],{2,16}} = string(\"   \t \t\t  a\\n \t \t  aaa\t\"), ok.\n">>,
+        default,
+        [{tab_size,3},{error_location,column}],
+        ok}],
+    run(Config, Ts),
+    ok.
