@@ -77,10 +77,10 @@ Even though it is undefined, modified `leex` module should be loaded by rebar3. 
 
 Lets assume that you have your `my_example.xrl` file in `examples/` directory. You can generate a lexical analyzer from it in a following way:
 
-    1> code:purge(my_example)
-    2> leex:file("examples/my_example",[])
-    3> compile:file("examples/my_example.erl",[{outdir, "./examples/"}])
-    4> code:load_abs("examples/my_example)
+    1> code:purge(my_example).
+    2> leex:file("examples/my_example",[]).
+    3> compile:file("examples/my_example.erl",[{outdir, "./examples/"}]).
+    4> code:load_abs("examples/my_example").
 
 This will create the analyzer's source (*"examples/my_example.erl"*), compile it to the bytecode (*examples/my_example.beam*) and then load it. One can then interact with the loaded module by calling `string/1,2`, `token/2,3,4` or `tokens/2,3,4`.
 
