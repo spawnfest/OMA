@@ -22,3 +22,4 @@ error_location :: column | line
 token_location
 tab
 testiraj s više pluseva
+što sa push_backom?

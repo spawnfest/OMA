@@ -40,7 +40,7 @@
 	 init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-	 number/1]).
+	 number/1, end_loc/1]).
 
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, test_server:minutes(1)).
@@ -57,7 +57,7 @@ end_per_testcase(_Case, Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [number].
+    [number, end_loc].
 
 groups() -> 
     [].
@@ -144,19 +144,53 @@ search_for_file_attr(PartialFilePathRegex, Forms) ->
 %%%%%%%%%%%%%%%%%%%%%%%%
 
 number(Config) ->
-    Ts = [{integer,
+    Ts = [{number,
       <<"Definitions.\n"
         "D = [0-9]\n"
         "Rules.\n"
         "{D}+ :\n"
-        "{token,{integer,TokenLine,list_to_integer(TokenChars)}}.\n"
+        "{token,{integer,{TokenLine,TokenCol},list_to_integer(TokenChars)}}.\n"
         "{D}+\\.{D}+((E|e)(\\+|\\-)?{D}+)? :\n"
-        "{token,{float,TokenLine,list_to_float(TokenChars)}}.\n"
+        "{token,{float,{TokenLine,TokenCol},list_to_float(TokenChars)}}.\n"
         "Erlang code.\n"
         "-export([t/0]).\n"
         "t() ->\n"
-        "{ok,[{float, 1, 4.44},1} = string(\"4.44\"), ok.\n">>,
+        "{ok,[{float, {1,1}, 4.44}],{1,5}} = string(\"4.44\"), ok.\n">>,
+           default,
+           ok},
+        {number_multiline,
+      <<"Definitions.\n"
+        "D = [0-9]\n"
+        "W = [\\s\\n]\n"
+        "Rules.\n"
+        "{W}+ :\n"
+        "skip_token.\n"
+        "{D}+ :\n"
+        "{token,{integer,{TokenLine,TokenCol},list_to_integer(TokenChars)}}.\n"
+        "{D}+\\.{D}+((E|e)(\\+|\\-)?{D}+)? :\n"
+        "{token,{float,{TokenLine,TokenCol},list_to_float(TokenChars)}}.\n"
+        "Erlang code.\n"
+        "-export([t/0]).\n"
+        "t() ->\n"
+        "{ok,[{float, {2,1}, 4.44},{integer, {3,3}, 5},{integer, {7,3}, 7}],{8,2}} = string(\"\n4.44  \n  5 \n  \n\n\n  7 \n \"), ok.\n">>,
            default,
            ok}],
+    run(Config, Ts),
+    ok.
+
+end_loc(Config) ->
+    Ts = [
+        {nl_last,
+        <<"Definitions.\n"
+            "Rules.\n"
+            "[a]+[\\n]*= : {token, {first, {TokenLine,TokenCol}}}.\n"
+            "[a]+ : {token, {second, {TokenLine,TokenCol}}}.\n"
+            "[\\s\\r\\n\\t]+ : skip_token.\n"
+            "Erlang code.\n"
+            "-export([t/0]).\n"
+            "t() ->\n"
+            "{ok,[{second,{1,1}}],{2,1}} = string(\"a\\n\"), ok.\n">>,
+      default,
+      ok}],
     run(Config, Ts),
     ok.
