@@ -21,6 +21,7 @@ All the modifications were done by myself and everything was done inside hackato
 +   Column number in tokens
     +   **This can be very useful if you want to include token's column number in the `yecc`-generated parser!**
 +   Configurable tab lenght
++   Unicode chars counted as columns as they contain bytes
 
 ## Design
 Errors in error messages can now return either `Line` or `{Line, Column}`. This can be configured by passing option `{error_location, line | column}` to `leex:file/2`. Default value is `line`. To allow backward compatibility and avoid code duplication, column number is always tracked and then filtered if needed. This also allows us to set the column number in tokens, even if the `error_location` is `line`.
@@ -89,5 +90,5 @@ Feel free to add options while calling `leex:file/2`, **but** make sure that you
 ## TODOs
 
 + how to handle pushing characters back? Is it even possible to handle this while keeping Line and Column correctness?
-+ more testing (especially unicode characters and column number correctness)
++ more testing
 + better documentation

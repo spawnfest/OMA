@@ -318,15 +318,21 @@ adjust_line(T, A, [_|Cs], L) ->
     adjust_line(T-1, A, Cs, L).
 
 %% adjust_col(Chars, AcceptLength, Col) -> NewCol
-%% Handle newlines and tabs.
+%% Handle newlines, tabs and unicode chars.
 adjust_col(_, 0, Col) -> 
     Col;
 adjust_col([$\n | R], L, _) ->
     adjust_col(R, L-1, 1);
 adjust_col([$\t | R], L, C) ->
     adjust_col(R, L-1, tab_forward(C)+1);
-adjust_col([_ | R], L, Col) ->
-    adjust_col(R, L-1, Col+1).
+adjust_col([C | R], L, Col) when C>=0 andalso C=< 16#7F ->
+    adjust_col(R, L-1, Col+1);
+adjust_col([C | R], L, Col) when C>= 16#80 andalso C=< 16#7FF ->
+    adjust_col(R, L-1, Col+2);
+adjust_col([C | R], L, Col) when C>= 16#800 andalso C=< 16#FFFF ->
+    adjust_col(R, L-1, Col+3);
+adjust_col([C | R], L, Col) when C>= 16#10000 andalso C=< 16#10FFFF ->
+    adjust_col(R, L-1, Col+4).
 
 tab_forward(C) ->
     D = C rem tab_size(),

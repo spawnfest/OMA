@@ -21,8 +21,6 @@
 
 %-define(debug, true).
 
--include_lib("stdlib/include/erl_compile.hrl").
--include_lib("stdlib/include/assert.hrl").
 -include_lib("kernel/include/file.hrl").
 
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
@@ -30,11 +28,9 @@
 	 init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-	 file/1, compile/1, syntax/1, deterministic/1,
-	 
-	 pt/1, man/1, ex/1, ex2/1, not_yet/1,
+	 man/1, ex/1, ex2/1, unicode/1,
 	 line_wrap/1,
-	 otp_10302/1, otp_11286/1, unicode/1, otp_13916/1]).
+	 otp_10302/1, otp_13916/1]).
 
 -include_lib("tutil.hrl").
 
@@ -53,11 +49,12 @@ end_per_testcase(_Case, Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    %%[{group, checks}, {group, examples}, {group, tickets}, {group, bugs}].
-    [man, ex, ex2, line_wrap, otp_13916, otp_10302].
+    [{group, examples}, {group, tickets}, {group, bugs}].
 
 groups() -> 
-    [].
+    [{examples, [], [man, ex, ex2, unicode]},
+    {tickets, [], [otp_10302, otp_13916]},
+    {bugs, [], [line_wrap]}].
 
 init_per_suite(Config) ->
     Config.
@@ -71,370 +68,18 @@ init_per_group(_GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
-
-
-file(doc) ->
-    "Bad files and options.";
-file(suite) -> [];
-file(Config) when is_list(Config) ->
-    Dir = ?privdir,
-    Ret = [return, {report, false}],
-    {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
-        leex:file("not_a_file", Ret),
-    {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
-        leex:file("not_a_file", [{return,true}]),
-    {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
-        leex:file("not_a_file", [{report,false},return_errors]),
-    error = leex:file("not_a_file"),
-    error = leex:file("not_a_file", [{return,false},report]),
-    error = leex:file("not_a_file", [return_warnings,{report,false}]),
-
-    Filename = filename:join(Dir, "file.xrl"),
-    file:delete(Filename),
-
-    {'EXIT', {badarg, _}} = (catch leex:file({foo})),
-    {'EXIT', {badarg, _}} = 
-        (catch leex:file(Filename, {parserfile,{foo}})),
-    {'EXIT', {badarg, _}} = 
-        (catch leex:file(Filename, {includefile,{foo}})),
-
-    {'EXIT', {badarg, _}} = (catch leex:file(Filename, no_option)),
-    {'EXIT', {badarg, _}} = 
-        (catch leex:file(Filename, [return | report])),
-    {'EXIT', {badarg, _}} = 
-        (catch leex:file(Filename, {return,foo})),
-    {'EXIT', {badarg, _}} = 
-        (catch leex:file(Filename, includefile)),
-
-    Mini = <<"Definitions.\n"
-             "D  = [0-9]\n"
-             "Rules.\n"
-             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-             "Erlang code.\n">>,
-    ok = file:write_file(Filename, Mini),
-    {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
-        leex:file(Filename, [{includefile,"/ /"} | Ret]),
-
-    LeexPre = filename:join(Dir, "leexinc.hrl"),
-    ok = file:write_file(LeexPre, <<"syntax error.\n">>),
-    PreErrors = run_test(Config, Mini, LeexPre),
-    {errors,
-           [{{1,8},_,["syntax error before: ","error"]},
-            {{3,1},_,undefined_module}],
-           []} =
-        extract(LeexPre, PreErrors),
-    file:delete(LeexPre),
-
-    Ret2 = [return, report_errors, report_warnings, verbose],
-    Scannerfile = filename:join(Dir, "file.erl"),
-    ok = file:write_file(Scannerfile, <<"nothing">>),
-    unwritable(Scannerfile),
-    {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
-        leex:file(Filename, Ret2),
-    writable(Scannerfile),
-    file:delete(Scannerfile),
-
-    Dotfile = filename:join(Dir, "file.dot"),
-    ok = file:write_file(Dotfile, <<"nothing">>),
-    unwritable(Dotfile),
-    {error,[{_,[{none,leex,{file_error,_}}]}],[]} = 
-        leex:file(Filename, [dfa_graph | Ret2]),
-    writable(Dotfile),
-    file:delete(Dotfile),
-
-    ok = file:delete(Scannerfile),
-    Warn = <<"Definitions.1998\n"
-             "D  = [0-9]\n"
-             "Rules.\n"
-             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-             "Erlang code.\n">>,
-    ok = file:write_file(Filename, Warn),
-    error = leex:file(Filename, [warnings_as_errors]),
-    false = filelib:is_regular(Scannerfile),
-    error = leex:file(Filename, [return_warnings,warnings_as_errors]),
-    false = filelib:is_regular(Scannerfile),
-    {error,_,[{Filename,[{1,leex,ignored_characters}]}]} =
-        leex:file(Filename, [return_errors,warnings_as_errors]),
-    false = filelib:is_regular(Scannerfile),
-    {ok,Scannerfile,[{Filename,[{1,leex,ignored_characters}]}]} =
-        leex:file(Filename, [return_warnings]),
-    true = filelib:is_regular(Scannerfile),
-
-    file:delete(Filename),
-    ok.
-
-compile(doc) ->
-    "Check of compile/3.";
-compile(suite) -> [];
-compile(Config) when is_list(Config) ->
-    Dir = ?privdir,
-    Filename = filename:join(Dir, "file.xrl"),
-    Scannerfile = filename:join(Dir, "file.erl"),
-    Mini = <<"Definitions.\n"
-             "D  = [0-9]\n"
-             "Rules.\n"
-             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-             "Erlang code.\n">>,
-    ok = file:write_file(Filename, Mini),
-    ok = leex:compile(Filename, Scannerfile, #options{}),
-    file:delete(Scannerfile),
-    file:delete(Filename),
-    ok.
-
-syntax(doc) ->
-    "Syntax checks.";
-syntax(suite) -> [];
-syntax(Config) when is_list(Config) ->
-    Dir = ?privdir,
-    Filename = filename:join(Dir, "file.xrl"),
-    Ret = [return, {report, true}],
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "%% comment\n"
-                                 "Rules.\n"
-                                 "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n
-                                 ">>),
-    {error,[{_,[{7,leex,missing_code}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+  : \n">>),
-    {error,[{_,[{5,leex,missing_code}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "[] :">>),
-    {error,[{_,[{4,leex,{regexp,_}}]}],[]} = 
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+ : .\n"
-                                 "[] : ">>),
-    {error,[{_,[{5,leex,{regexp,_}}]}],[]} = 
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "[] : .\n">>),
-    {error,[{_,[{4,leex,{regexp,_}}]}],[]} = 
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+ ">>),
-    {error,[{_,[{5,leex,bad_rule}]}],[]} = 
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+ ; ">>),
-    {error,[{_,[{4,leex,bad_rule}]}],[]} = 
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "[] : '99\n">>),
-    {error,[{_,[{4,erl_scan,_}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n">>),
-    {error,[{_,[{3,leex,empty_rules}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "Erlang code.\n">>),
-    {error,[{_,[{4,leex,empty_rules}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n">>),
-    {error,[{_,[{2,leex,missing_rules}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Erlang code.\n">>),
-    {error,[{_,[{3,leex,missing_rules}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"">>),
-    %% This is a weird line:
-    {error,[{_,[{0,leex,missing_defs}]}],[]} = leex:file(Filename, Ret),
-    ok = file:write_file(Filename, 
-                               <<"Rules.\n">>),
-    {error,[{_,[{1,leex,missing_defs}]}],[]} = leex:file(Filename, Ret),
-
-    %% Check that correct line number is used in messages.
-    ErlFile = filename:join(Dir, "file.erl"),
-    Ret1 = [{scannerfile,ErlFile}|Ret],
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+  : {token,\n"
-                                 "         {word,TokenLoc,TokenChars,\n"
-                                 "          DDDD}}.\n" % unbound
-                                 "Erlang code.\n"
-                                 "an error.\n">>),     % syntax error
-    {ok, _, []} = leex:file(Filename, Ret1),
-    {error, 
-           [{_,[{{8,4},_,["syntax error before: ","error"]}]},
-            {_,[{{6,6},_,{unbound_var,'DDDD'}}]}],
-           []} =
-        compile:file(ErlFile, [basic_validation, return]),
-
-    %% Ignored characters
-    ok = file:write_file(Filename,
-                               <<"Definitions. D = [0-9]\n"
-                                 "Rules. [a-z] : .\n"
-                                 "1 : skip_token.\n"
-                                 "Erlang code. f() -> a.\n">>),
-    {ok,_,[{_,
-                  [{1,leex,ignored_characters},
-                   {2,leex,ignored_characters},
-                   {4,leex,ignored_characters}]}]} = 
-        leex:file(Filename, Ret),
-
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+\\  : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,{unterminated,"\\"}}}]}],[]} =
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+\\x  : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,{illegal_char,"\\x"}}}]}],[]} =
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "{L}+\\x{  : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,{unterminated,"\\x{"}}}]}],[]} =
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "[^ab : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,{unterminated,"["}}}]}],[]} =
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "(a : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,{unterminated,"("}}}]}],[]} =
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "[b-a] : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,{char_class,"b-a"}}}]}],[]} =
-        leex:file(Filename, Ret),
-
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "D  = [0-9]\n"
-                                 "Rules.\n"
-                                 "\\x{333333333333333333333333} : token.\n">>),
-    {error,[{_,[{4,leex,{regexp,
-                                {illegal_char,
-                                 "\\x{333333333333333333333333}"}}}]}],[]} =
-        leex:file(Filename, Ret),
-    ok.
-
-deterministic(doc) ->
-    "Check leex respects the +deterministic flag.";
-deterministic(suite) -> [];
-deterministic(Config) when is_list(Config) ->
-    Dir = ?privdir,
-    Filename = filename:join(Dir, "file.xrl"),
-    Scannerfile = filename:join(Dir, "file.erl"),
-    Mini = <<"Definitions.\n"
-             "D  = [0-9]\n"
-             "Rules.\n"
-             "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-             "Erlang code.\n">>,
-    ok = file:write_file(Filename, Mini),
-
-    %% Generated leex scanners include the leexinc.hrl header file by default,
-    %% so we'll get a -file attribute corresponding to that include. In
-    %% deterministic mode, that include should only use the basename,
-    %% "leexinc.hrl", but otherwise, it should contain the full path.
-
-    %% Matches when OTP is not installed (e.g. /lib/parsetools/include/leexinc.hrl)
-    %% and when it is (e.g. /lib/parsetools-2.3.2/include/leexinc.hrl)
-    AbsolutePathSuffix = ".*/lib/parsetools.*/include/leexinc\.hrl",
-
-    ok = leex:compile(Filename, Scannerfile, #options{specific=[deterministic]}),
-    {ok, FormsDet} = epp:parse_file(Scannerfile,[]),
-    ?assertMatch(false, search_for_file_attr(AbsolutePathSuffix, FormsDet)),
-    ?assertMatch({value, _}, search_for_file_attr("leexinc\.hrl", FormsDet)),
-    file:delete(Scannerfile),
-
-    ok = leex:compile(Filename, Scannerfile, #options{}),
-    {ok, Forms} = epp:parse_file(Scannerfile,[]),
-    ?assertMatch({value, _}, search_for_file_attr(AbsolutePathSuffix, Forms)),
-    file:delete(Scannerfile),
-
-    file:delete(Filename),
-    ok.
-
-pt(doc) ->
-    "Pushing back characters.";
-pt(suite) -> [];
-pt(Config) when is_list(Config) ->
-    %% Needs more testing...
-    Ts = [{pt_1, 
-         <<"Definitions.\n"
-            "D  = [0-9]\n"
-            "L  = [a-z]\n"
-
-            "Rules.\n"
-            "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-            "abc{D}+  : {skip_token,\"sture\" ++ string:substr(TokenChars, 4)}.\n"
-            "{D}+  : {token,{integer,TokenLoc,list_to_integer(TokenChars)}}.\n"
-            "\\s  : .\n"
-            "\\r\\n  : {end_token,{crlf,TokenLine}}.\n"
-
-            "Erlang code.\n"
-            "-export([t/0]).\n"
-            "t() ->
-                 {ok,[{word,{1,1},\"sture\"},{integer,{1,6},123}],1} =
-                     string(\"abc123\"), ok. ">>,
-           default,
-           [{error_location, column}],
-           ok}],
-
-    run(Config, Ts),
-    ok.
-
 unicode(suite) ->
     [];
 unicode(Config) when is_list(Config) ->
     Ts = [{unicode_1, 
 	   <<"%% -*- coding: utf-8 -*-\n"
-	     "Definitions.\n"
+	     "Definitions.\n "
 	     "RTLarrow    = (â)\n"
 	     "Rules.\n"
-	     "{RTLarrow}  : {token,{\"â\",TokenLine}}.\n"
+	     "{RTLarrow}  : {token,{\"â\",TokenLoc}}.\n"
 	     "Erlang code.\n"
 	     "-export([t/0]).\n"
-	     "t() -> {ok, [{\"â\", 1}], 1} = string(\"â\"), ok.">>,
+	     "t() -> {ok, [{\"â\", {1,1}}], {1,4}} = string(\"â\"), ok.">>,
            default,
            [{error_location, column}],
            ok}],
@@ -844,30 +489,6 @@ Erlang code.
 
 %% End of line_wrap
 
-not_yet(doc) ->
-    "Not yet implemented.";
-not_yet(suite) -> [];
-not_yet(Config) when is_list(Config) ->
-    Dir = ?privdir,
-    Filename = filename:join(Dir, "file.xrl"),
-    Ret = [return, {report, true}],
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "Rules.\n"
-                                 "$ : .\n"
-                                 "Erlang code.\n">>),
-    {error,[{_,[{3,leex,{regexp,_}}]}],[]} = 
-        leex:file(Filename, Ret),
-    ok = file:write_file(Filename,
-                               <<"Definitions.\n"
-                                 "Rules.\n"
-                                 "^ : .\n"
-                                 "Erlang code.\n">>),
-    {error,[{_,[{3,leex,{regexp,_}}]}],[]} = 
-        leex:file(Filename, Ret),
-
-    ok.
-
 otp_10302(doc) ->
     "OTP-10302. Unicode characters scanner/parser.";
 otp_10302(suite) -> [];
@@ -972,58 +593,6 @@ otp_10302(Config) when is_list(Config) ->
           [{error_location, column}],
           ok}],
     run(Config, Ts),
-
-    ok.
-
-otp_11286(doc) ->
-    "OTP-11286. A Unicode filename bug; both Leex and Yecc.";
-otp_11286(suite) -> [];
-otp_11286(Config) when is_list(Config) ->
-    {ok, Peer, Node} = ?CT_PEER(["+fnu"]),
-    Dir = ?privdir,
-    UName = [1024] ++ "u",
-    UDir = filename:join(Dir, UName),
-    _ = rpc:call(Node, file, make_dir, [UDir]),
-
-    %% Note: Cannot use UName as filename since the filename is used
-    %% as module name. To be fixed in R18.
-    Filename = filename:join(UDir, 'OTP-11286.xrl'),
-    Scannerfile = filename:join(UDir, 'OTP-11286.erl'),
-    Options = [return, {scannerfile, Scannerfile}],
-
-    Mini1 = <<"%% coding: utf-8\n"
-              "Definitions.\n"
-              "D  = [0-9]\n"
-              "Rules.\n"
-              "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-              "Erlang code.\n">>,
-    ok = rpc:call(Node, file, write_file, [Filename, Mini1]),
-    {ok, _, []} = rpc:call(Node, leex, file, [Filename, Options]),
-    {ok,_,_} = rpc:call(Node, compile, file,
-                  [Scannerfile,[basic_validation,return]]),
-
-    Mini2 = <<"Definitions.\n"
-              "D  = [0-9]\n"
-              "Rules.\n"
-              "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-              "Erlang code.\n">>,
-    ok = rpc:call(Node, file, write_file, [Filename, Mini2]),
-    {ok, _, []} = rpc:call(Node, leex, file, [Filename, Options]),
-    {ok,_,_} = rpc:call(Node, compile, file,
-                  [Scannerfile,[basic_validation,return]]),
-
-    Mini3 = <<"%% coding: latin-1\n"
-              "Definitions.\n"
-              "D  = [0-9]\n"
-              "Rules.\n"
-              "{L}+  : {token,{word,TokenLoc,TokenChars}}.\n"
-              "Erlang code.\n">>,
-    ok = rpc:call(Node, file, write_file, [Filename, Mini3]),
-    {ok, _, []} = rpc:call(Node, leex, file, [Filename, Options]),
-    {ok,_,_} = rpc:call(Node, compile, file,
-                  [Scannerfile,[basic_validation,return]]),
-
-    peer:stop(Peer),
     ok.
 
 otp_13916(doc) ->
@@ -1063,29 +632,3 @@ otp_13916(Config) when is_list(Config) ->
            ok}],
     run(Config, Ts),
     ok.
-
-unwritable(Fname) ->
-    {ok, Info} = file:read_file_info(Fname),
-    Mode = Info#file_info.mode - 8#00200,
-    ok = file:write_file_info(Fname, Info#file_info{mode = Mode}).
-
-writable(Fname) ->
-    {ok, Info} = file:read_file_info(Fname),
-    Mode = Info#file_info.mode bor 8#00200,
-    ok = file:write_file_info(Fname, Info#file_info{mode = Mode}).
-
-
-extract(File, {error, Es, Ws}) ->
-    {errors, extract(File, Es), extract(File, Ws)};    
-extract(File, Ts) ->
-    lists:append([T || {F, T} <- Ts,  F =:= File]).
-
-search_for_file_attr(PartialFilePathRegex, Forms) ->
-    lists:search(fun
-                   ({attribute, _, file, {FileAttr, _}}) ->
-                      case re:run(FileAttr, PartialFilePathRegex, [unicode]) of
-                        nomatch -> false;
-                        _ -> true
-                      end;
-                   (_) -> false end,
-                 Forms).
