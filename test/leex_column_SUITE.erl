@@ -54,7 +54,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     %%[{group, checks}, {group, examples}, {group, tickets}, {group, bugs}].
-    [man, ex, ex2, line_wrap, otp_13916].
+    [man, ex, ex2, line_wrap, otp_13916, otp_10302].
 
 groups() -> 
     [].
@@ -941,7 +941,7 @@ otp_10302(Config) when is_list(Config) ->
          "-export([t/0]).\n"
          "t() ->\n"
          "    %% HÃ¤pp, 'HÃ¤pp',\"\\x{400}B\",\"Ã¶rn_Ð\"\n"
-         "    {ok, [R], 1} = string(\"tip\"),\n"
+         "    {ok, [R], {1,4}} = string(\"tip\"),\n"
          "    {tip,foo,'HÃ¤pp',[1024,66],[246,114,110,95,1024]} = R,\n"
          "    HÃ¤pp = foo,\n"
          "    {tip, HÃ¤pp, 'HÃ¤pp',\"\\x{400}B\",\"Ã¶rn_Ð\"} = R,\n"
@@ -963,7 +963,7 @@ otp_10302(Config) when is_list(Config) ->
          "-export([t/0]).\n"
          "t() ->\n"
          "    %% Häpp, 'Häpp',\"\\x{400}B\",\"Ã¶rn_Ð\"\n"
-         "    {ok, [R], 1} = string(\"tip\"),\n"
+         "    {ok, [R], {1,4}} = string(\"tip\"),\n"
          "    {tip,foo,'Häpp',[1024,66],[195,182,114,110,95,208,128]} = R,\n"
          "    Häpp = foo,\n"
          "    {tip, Häpp, 'Häpp',\"\\x{400}B\",\"Ã¶rn_Ð\"} = R,\n"
